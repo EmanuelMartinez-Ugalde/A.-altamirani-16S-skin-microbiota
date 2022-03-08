@@ -1,0 +1,250 @@
+Author: emartug@gmail.com
+
+###QIIME2 workflow for A. altamirani 16S###
+#QIIME2 version 2020.2
+
+#Two sequencing runs to generate 16S 2x250 SE MiSeq reads
+#Data was previously demultiplexed by sequencing facility
+
+###Importing data using Casava 1.8###
+
+conda activate qiime2-2020.2
+
+qiime tools import \
+--type 'SampleData[SequencesWithQuality]' \
+--input-path Manifest/manifest_altamirani_corrida1.txt \
+--output-path Demux/Altamirani_demux-single-end-corrida1.qza \ 
+--input-format SingleEndFastqManifestPhred33V2
+
+
+qiime tools import \
+--type 'SampleData[SequencesWithQuality]' \
+--input-path Manifest/manifest_altamirani_corrida2.txt \
+--output-path Demux/Altamirani_demux-single-end-corrida2.qza \
+--input-format SingleEndFastqManifestPhred33V2
+
+#Summarize imported files
+
+qiime demux summarize \
+--i-data Demux/Altamirani_demux-single-end-corrida1.qza \
+--o-visualization Corrida1-summary.qzv
+
+
+qiime demux summarize \
+--i-data Demux/Altamirani_demux-single-end-corrida2.qza \
+--o-visualization Corrida2-summary.qzv
+
+#Overall quality scores over with mean QS over 30. Reads were trimm at length 13 and trunc at  length 247 Bp
+#See Altamirani_demux for visualization
+
+###Quality control using DADA2###
+
+qiime dada2 denoise-single \
+--i-demultiplexed-seqs Demux/Altamirani_demux-single-end-corrida1.qza \
+--p-trim-left 13 \
+--p-trunc-len 247 \
+--o-representative-sequences Dada/Corrida1_rep-seqs-dada2.qza \
+--o-table Dada/Corrida1_table-dada2.qza \   
+--o-denoising-stats Dada/Corrida1_denoise_stats-dada2.qza \
+--p-n-threads 4 
+  
+qiime dada2 denoise-single \ 
+--i-demultiplexed-seqs Demux/Altamirani_demux-single-end-corrida2.qza \
+--p-trim-left 13 \
+--p-trunc-len 247 \
+--o-representative-sequences Dada/Corrida2_rep-seqs-dada2.qza \
+--o-table Dada/Corrida2_table-dada2.qza \
+--o-denoising-stats Dada/Corrida2_denoise_stats-dada2.qza \
+--p-n-threads 4
+
+
+#Tabulete DADA2 output
+qiime metadata tabulate \
+--m-input-file Dada/Corrida1_denoise_stats- \
+  --o-visualization Corrida1-denoising-stats-1.qzv \
+
+qiime metadata tabulate \
+--m-input-file Dada/Corrida2_denoise_stats-dada2.qza \
+--o-visualization Corrida2-denoising-stats-1.qzv \
+
+#Merge DADA2 output for sequencig runs 1 and 2
+
+qiime feature-table merge \
+--i-tables Dada/Corrida1_table-dada2.qza \
+--i-tables Dada/Corrida2_table-dada2.qza \
+--o-merged-table Merged/Ambystoma_table.qza
+
+qiime feature-table merge-seqs \
+--i-data Dada/Corrida1_rep-seqs-dada2.qza \ 
+--i-data Dada/Corrida2_rep-seqs-dada2.qza \
+--o-merged-data Merged/rep-seqs.qza
+
+#Summaraize merged files
+
+qiime feature-table summarize \
+--i-table Merged/Ambystoma_table.qza \
+--o-visualization Ambystoma_table.qzv \
+--m-sample-metadata-file Metadata/metadata_altamirani.txt
+
+qiime feature-table tabulate-seqs \
+--i-data Merged/rep-seqs.qza \
+--o-visualization Ambystoma_rep-seqs.qzv
+
+###Generate a phylogentic tree###
+
+qiime phylogeny align-to-tree-mafft-fasttree \
+--i-sequences Merged/rep-seqs.qza \
+--p-n-threads 4 \
+--o-alignment Phylo/Altamirani_aligned-rep-seqs.qza \
+--o-masked-alignment Phylo/Altamirani_tamasked-aligned-rep-seqs.qza \
+--o-tree Phylo/Altamirani_unrooted-tree.qza \
+--o-rooted-tree Phylo/Altamirani_rooted-tree.qza 
+
+###Taxonomic assigment###
+#Taxonomic assigments were generated using a pretrained navie classifer on 515F/806R 
+#of the 16S rRNA region using SILVA DB
+
+wget https://data.qiime2.org/2020.2/common/silva-132-99-515-806-nb-classifier.qza
+
+nohup qiime feature-classifier classify-sklearn \
+--i-classifier Taxonomy/2020-2-silva-132-99-515-806-nb-classifier.qza \
+--i-reads Merged/rep-seqs.qza \
+--o-classification Taxonomy/Altamirani_taxonomy.qza &
+  
+  qiime metadata tabulate \
+--m-input-file Taxonomy/Altamirani_taxonomy.qza \
+--o-visualization Taxonomy/Altamirany_taxonomy_resume.qzv
+
+#Filter out mitochondria, chlorplast and unassigned sequences
+qiime taxa filter-table \
+--i-table Merged/Ambystoma_table.qza \
+--i-taxonomy Taxonomy/Altamirani_taxonomy.qza \
+--p-exclude mitochondria,chloroplast,Eukaryota \
+--p-mode contains \
+--o-filtered-table Taxonomy/Altamirani_Taxfilt_OTU-table.qza 
+
+qiime taxa filter-table \
+--i-table Taxonomy/Altamirani_Taxfilt_OTU-table.qza \ 
+--i-taxonomy Taxonomy/Altamirani_taxonomy.qza \
+--p-include D_1__ \
+--p-mode contains \
+--o-filtered-table Taxonomy/Altamirani_filtered_OTU-table.qza
+
+###Core diveristy metrics###
+
+qiime diversity core-metrics-phylogenetic \
+--i-phylogeny Phylo/Altamirani_rooted-tree.qza \
+--i-table Taxonomy/Altamirani_filtered_OTU-table.qza \
+--p-sampling-depth 10000 --m-metadata-file Metadata/metadata_altamirani.txt \
+--output-dir Altamirani_core-metrics-results-Bd
+
+#Beta diversity analysis using QIIME2
+
+qiime diversity beta-group-significance \
+--i-distance-matrix Altamirani_core-metrics-results/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file Metadata/metadata_altamirani.txt --m-metadata-column SampleType \
+--o-visualization unweighted-unifrac-significance-SampType.qzv \
+--p-pairwise
+
+#Analysis showed that metamorphic and non-metamorphic axolotls differs both in alpha and beta diverity. So we decide
+#to perform a core diverity analyis for these samples individually
+
+###Filtering out metamorphic and non metamorphic samples from the whole data set###
+
+qiime feature-table filter-samples \
+--i-table Taxonomy/Altamirani_filtered_OTU-table.qza \
+--m-metadata-file Metadata/metadata_altamirani.txt \
+--p-where "SampleType IN ('Nometamorphic')" \
+--o-filtered-table A_J/Nometamorphic-table.qza
+
+qiime feature-table filter-samples \
+--i-table Taxonomy/Altamirani_filtered_OTU-table.qza \
+--m-metadata-file Metadata/metadata_altamirani.txt \
+--p-where "SampleType IN ('Metamorphic')" \
+--o-filtered-table A_J/Metamorphic -table.qza
+
+qiime feature-table filter-seqs \
+--i-data  Merged/rep-seqs.qza \
+--i-table A_J/Nometamorphic-table.qza \
+--o-filtered-data A_J/rep-seqs-nomet.qza
+
+qiime feature-table filter-seqs \
+--i-data  Merged/rep-seqs.qza \
+--i-table A_J/Metamorphic-table.qza \
+--o-filtered-data A_J/rep-seqs-met.qza
+
+qiime phylogeny align-to-tree-mafft-fasttree \
+--i-sequences A_J/rep-seqs-nomet.qza \
+--o-alignment A_J/Nometamorphic-rep-seqs.qza \
+--o-masked-alignment A_J/NM-masked-aligned-rep-seqs.qza \
+--o-tree A_J/NM-unrooted-tree.qza \
+--o-rooted-tree A_J/NM-rooted-tree.qza 
+
+qiime phylogeny align-to-tree-mafft-fasttree \
+--i-sequences A_J/rep-seqs-met.qza \
+--o-alignment A_J/Metamorphic-rep-seqs.qza \
+--o-masked-alignment A_J/M-masked-aligned-rep-seqs.qza \
+--o-tree A_J/M-unrooted-tree.qza \
+--o-rooted-tree A_J/M-rooted-tree.qza 
+  
+qiime diversity core-metrics-phylogenetic \
+--i-phylogeny A_J/NM-rooted-tree.qza \
+--i-table A_J/Nometamorphic-table.qza \
+--p-sampling-depth 10000 \
+--m-metadata-file Metadata/metadata_altamirani.txt \
+--output-dir A_J/Nometamorphic-core-metrics-Bd
+
+qiime diversity core-metrics-phylogenetic \
+--i-phylogeny A_J/M-rooted-tree.qza \
+--i-table A_J/Metamorphic-table.qza \
+--p-sampling-depth 10000 \
+--m-metadata-file Metadata/metadata_altamirani.txt \
+--output-dir A_J/Metamorphic-core-metrics-Bd
+
+#Beta diversity analysis using QIIME2 for metamorphixc and non-metamorp'hic samples esting the effect of
+#seasonality, sampling location and Bd presence
+
+#Nonmetamorphic samples
+qiime diversity beta-group-significance \
+--i-distance-matrix A_J/Nometamorphic-core-metrics-Bd/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file Metadata/metadata_altamirani.txt \
+--m-metadata-column Seasonality \
+--o-visualization ADONIS/NM-weighted-unifrac-significance-Season.qzv \
+--p-pairwise
+
+qiime diversity beta-group-significance \
+--i-distance-matrix A_J/Nometamorphic-core-metrics-Bd/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file Metadata/metadata_altamirani.txt \
+--m-metadata-column Locality \
+--o-visualization ADONIS/NM-weighted-unifrac-significance-Locality.qzv \
+--p-pairwise
+
+qiime diversity beta-group-significance \
+--i-distance-matrix A_J/Nometamorphic-core-metrics-Bd/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file Metadata/metadata_altamirani.txt \
+--m-metadata-column BdPresence \
+--o-visualization ADONIS/NM-weighted-unifrac-significance-BdPresence.qzv \
+--p-pairwise
+
+#Metamorphic samples
+
+qiime diversity beta-group-significance \
+--i-distance-matrix A_J/Metamorphic-core-metrics-Bd/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file Metadata/metadata_altamirani.txt \
+--m-metadata-column Seasonality \
+--o-visualization ADONIS/M-weighted-unifrac-significance-Season.qzv \
+--p-pairwise
+
+qiime diversity beta-group-significance \
+--i-distance-matrix A_J/Metamorphic-core-metrics-Bd/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file Metadata/metadata_altamirani.txt \
+--m-metadata-column Locality \
+--o-visualization ADONIS/M-weighted-unifrac-significance-Locality.qzv \
+--p-pairwise
+
+qiime diversity beta-group-significance \
+--i-distance-matrix A_J/Metamorphic-core-metrics-Bd/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file Metadata/metadata_altamirani.txt \
+--m-metadata-column BdPresence \
+--o-visualization ADONIS/M-weighted-unifrac-significance-BdPresence.qzv \
+--p-pairwise
