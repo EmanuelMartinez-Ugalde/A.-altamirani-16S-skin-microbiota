@@ -1,7 +1,7 @@
 ##########################################
 #
-#       A.altamirani skin micrbiome          
-#       Martínez-Ugalde et al. 2022
+#       A.altamirani skin microbiome          
+#       MartÃ­nez-Ugalde et al. 2022
 #           emartug@gmail.com
 #
 ##########################################
