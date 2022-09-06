@@ -10,7 +10,7 @@
 #Core features for metamorphic and non-metamorphic samples in QIIME2
 
 qiime feature-table filter-samples \
---i-table Merged/Ambystoma_table.qza \
+--i-table Altamirani_core-metrics-results/rarefied_table.qza \
 --m-metadata-file metadata_altamirani.txt \
 --p-where "SampleType IN ('Adult')" \
 --o-filtered-table met90-table.qza
@@ -27,7 +27,7 @@ qiime feature-table core-features \
 --o-visualization met90-core-table.qzv
 
 qiime feature-table filter-samples \
---i-table Merged/Ambystoma_table.qza \
+--i-table Altamirani_core-metrics-results/rarefied_table.qza \
 --m-metadata-file metadata_altamirani.txt \
 --p-where "SampleType IN ('Juvenile')" \
 --o-filtered-table nmet90-table.qza
@@ -43,9 +43,8 @@ qiime feature-table core-features \
 --p-steps 10 \
 --o-visualization nmet90-core-table-rare.qzv
 
-
 qiime feature-table filter-samples \
---i-table Merged/Ambystoma_table.qza \
+--i-table Altamirani_core-metrics-results/rarefied_table.qza \
 --m-metadata-file metadata_altamirani.txt \
 --p-where "SampleType IN ('Sediment')" \
 --o-filtered-table sed90-table.qza
@@ -62,7 +61,7 @@ qiime feature-table core-features \
 --o-visualization sed90-core-table-rare.qzv
 
 qiime feature-table filter-samples \
---i-table Merged/Ambystoma_table.qza \
+--i-table Altamirani_core-metrics-results/rarefied_table.qza \
 --m-metadata-file metadata_altamirani.txt \
 --p-where "SampleType IN ('Water')" \
 --o-filtered-table wat90-table.qza
